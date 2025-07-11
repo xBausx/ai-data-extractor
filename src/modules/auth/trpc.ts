@@ -169,10 +169,10 @@ export const authRouter = createTRPCRouter({
     // The 'name' is the event name we defined in our function.
     // The 'data' is the payload that will be sent to the function.
     await inngest.send({
-      name: 'test/hello.world',
-      data: { message: `user ${ctx.user.username}` },
+      // Change the event name to match our new function's trigger.
+      name: 'test/e2b.run',
+      data: { message: `E2B test triggered by ${ctx.user.username}` },
     })
-
     return { success: true }
   }),
 })
