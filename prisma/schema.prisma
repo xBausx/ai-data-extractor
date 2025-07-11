@@ -1,0 +1,35 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+    id        String    @id @default(cuid())
+    // The username must be unique and is used for logging in.
+    username  String    @unique
+    // The password hash. We never store plain-text passwords.
+    password  String
+    // A user can have many sessions, creating a one-to-many relationship.
+    sessions  Session[]
+}
+
+model Session {
+    id        String   @id
+    // The user this session belongs to.
+    userId    String
+    // The expiration date of the session.
+    expiresAt DateTime
+
+    // This defines the foreign key relationship to the User model.
+    user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
