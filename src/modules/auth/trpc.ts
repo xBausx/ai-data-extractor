@@ -164,14 +164,14 @@ export const authRouter = createTRPCRouter({
     }
   }),
 
-  triggerInngestTest: protectedProcedure.mutation(async ({ ctx }) => {
-    // The 'send' method is used to trigger an Inngest function.
-    // The 'name' is the event name we defined in our function.
-    // The 'data' is the payload that will be sent to the function.
+  triggerInngestTest: protectedProcedure.mutation(async () => {
     await inngest.send({
-      // Change the event name to match our new function's trigger.
-      name: 'test/e2b.run',
-      data: { message: `E2B test triggered by ${ctx.user.username}` },
+      name: 'app/agent.run',
+      data: {
+        fileUrl: 'https://example.com/test.txt', // A dummy URL for now
+        // The user's question for the AI
+        userPrompt: 'What is the secret code in the file?',
+      },
     })
     return { success: true }
   }),
