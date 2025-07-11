@@ -3,11 +3,16 @@
 import { serve } from 'inngest/next'
 import { inngest } from '@/lib/inngest'
 
-// Import the function we just created.
-import { helloWorldFn } from '@/modules/jobs/inngest/hello-world'
+// Remove the old hello-world import.
+// import { helloWorldFn } from '@/modules/jobs/inngest/hello-world';
 
-// Add the function to the functions array.
-const functions = [helloWorldFn]
+// Import the new E2B test function.
+import { e2bTestFn } from '@/modules/jobs/inngest/e2b-test'
+
+const functions = [
+  // helloWorldFn, // Remove this
+  e2bTestFn, // Add this
+]
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
