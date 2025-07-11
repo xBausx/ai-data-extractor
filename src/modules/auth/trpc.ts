@@ -4,6 +4,7 @@ import { TRPCError } from '@trpc/server'
 import { z } from 'zod'
 import { Argon2id } from 'oslo/password'
 import { cookies } from 'next/headers'
+import { inngest } from '@/lib/inngest'
 
 import {
   createTRPCRouter,
@@ -161,5 +162,17 @@ export const authRouter = createTRPCRouter({
     return {
       user: ctx.user,
     }
+  }),
+
+  triggerInngestTest: protectedProcedure.mutation(async ({ ctx }) => {
+    // The 'send' method is used to trigger an Inngest function.
+    // The 'name' is the event name we defined in our function.
+    // The 'data' is the payload that will be sent to the function.
+    await inngest.send({
+      name: 'test/hello.world',
+      data: { message: `user ${ctx.user.username}` },
+    })
+
+    return { success: true }
   }),
 })

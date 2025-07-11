@@ -21,6 +21,12 @@ export default function Home() {
       router.refresh()
     },
   })
+  // Add a new tRPC mutation hook to trigger the Inngest function.
+  const triggerInngest = trpc.auth.triggerInngestTest.useMutation({
+    onSuccess: () => {
+      alert('Inngest event sent! Check your dev server terminal.')
+    },
+  })
 
   // A simple loading state while we fetch the session.
   if (isSessionLoading) {
@@ -43,6 +49,13 @@ export default function Home() {
             isLoading={signOutMutation.isPending}
           >
             Logout
+          </Button>
+          <Button
+            onClick={() => triggerInngest.mutate()}
+            isLoading={triggerInngest.isPending}
+            className="bg-purple-600 hover:bg-purple-700"
+          >
+            Trigger Inngest Job
           </Button>
         </div>
       ) : (
