@@ -2,22 +2,24 @@
 
 import { createAgent, openai } from '@inngest/agent-kit'
 import { SYSTEM_PROMPT } from './prompt'
-import { shellTool, type ToolResources } from './tools'
+import { saveDetectedProducts, type ToolResources } from './tools'
 
-// This creates the AI agent instance.
+/**
+ * This creates the AI agent instance for product extraction.
+ */
 export const adeptAgent = createAgent<ToolResources>({
-  name: 'Adept AI Agent',
-
-  // The system prompt provides the AI with its core instructions.
+  name: 'Adept Product Extractor Agent',
   system: SYSTEM_PROMPT,
-  // We configure the agent to use OpenAI's GPT-4 Turbo model.
   model: openai({
-    model: 'gpt-4-turbo',
+    model: 'gpt-4o',
     defaultParameters: {
       temperature: 0.1,
     },
   }),
+  tools: [saveDetectedProducts],
 
-  // We register the tools that this agent is allowed to use.
-  tools: [shellTool],
+  // --- The Core Fix ---
+  // Instead of the ambiguous "required" string, we explicitly tell the agent
+  // the name of the tool it must call. This resolves the API error.
+  tool_choice: 'saveDetectedProducts',
 })

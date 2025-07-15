@@ -2,59 +2,72 @@
 
 import { createTool } from '@inngest/agent-kit'
 import { z } from 'zod'
-import type { Sandbox as SandboxType } from '@e2b/sdk'
 
 /**
- * First, we define the Zod schema for our tool's input.
- * We store it in a variable so we can easily get its type later.
+ * Defines the Zod schema for a single product.
+ * This ensures any product data extracted by the AI is well-structured.
  */
-const parameters = z.object({
-  cmd: z
+const productSchema = z.object({
+  // The name of the product, e.g., "Organic Banana".
+  name: z.string().describe('The full name of the product.'),
+  // A detailed description of the product in the image.
+  description: z
     .string()
-    .describe("The shell command to execute, e.g., 'ls -l' or 'cat file.txt'"),
+    .describe(
+      'A detailed description of the product, including its appearance and any notable features.',
+    ),
+  // The price of the product, if visible or inferable.
+  price: z
+    .number()
+    .optional()
+    .describe('The price of the product, if available.'),
+  // A category or group for the product, for logical organization.
+  group: z
+    .string()
+    .describe(
+      'The category or group this product belongs to, e.g., "Fruits", "Dairy", "Electronics".',
+    ),
 })
 
 /**
- * Second, we define the interface for the custom resources that our tool needs.
+ * Defines the schema for the parameters that our main tool will accept.
+ * The AI must provide an array of products that match the `productSchema`.
  */
-export interface ToolResources {
-  sandbox: SandboxType
-}
+const parameters = z.object({
+  products: z
+    .array(productSchema)
+    .describe('An array of all products detected in the image.'),
+})
 
 /**
- * Create the shell tool without generic type parameters
- * The context will be passed when the agent runs
+ * Defines the resources our agent needs. For this task, it doesn't need any
+ * special state passed from the outside, so we define it as an empty object.
  */
-export const shellTool = createTool({
-  name: 'shell',
-  description:
-    'Execute a shell command in the sandbox environment. Use this to inspect files and directories.',
+export type ToolResources = Record<string, never>
 
-  parameters: parameters,
-
+/**
+ * Creates the `saveDetectedProducts` tool.
+ * The agent's primary goal will be to call this tool with the data it extracts.
+ */
+export const saveDetectedProducts = createTool<
+  typeof parameters,
+  ToolResources
+>({
+  // The name of the tool, which the agent will be instructed to call.
+  name: 'saveDetectedProducts',
+  // A description for the AI to understand the tool's purpose.
+  description: 'Saves the structured data of all products found in the image.',
+  // The Zod schema for the tool's input.
+  parameters,
   /**
-   * The 'handler' function.
-   * @param {object} params - This is destructured from `z.infer<typeof parameters>`.
-   * @param {object} options - This contains the context and other options.
+   * The handler function is the code that runs when the agent calls this tool.
+   * For now, it will simply log the extracted data and return it.
+   * Later, this is where we can add the logic to save the data to our database.
+   * @param {object} { products } - The destructured, validated array of products from the AI.
    */
-  handler: async ({ cmd }, options) => {
-    try {
-      // Access the sandbox from the context passed by the agent
-      const { sandbox } = options as unknown as ToolResources
-      const proc = await sandbox.process.start({ cmd })
-      const result = await proc.wait()
-
-      return {
-        stdout: proc.output.stdout,
-        stderr: proc.output.stderr,
-        exitCode: result.exitCode,
-      }
-    } catch (error) {
-      return {
-        stdout: '',
-        stderr: `Error executing command: ${error instanceof Error ? error.message : String(error)}`,
-        exitCode: 1,
-      }
-    }
+  handler: async ({ products }) => {
+    console.log('[Tool] `saveDetectedProducts` was called with:', products)
+    // For now, we just return the data. This will be the final output of our Inngest function.
+    return products
   },
 })

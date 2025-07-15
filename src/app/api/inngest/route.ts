@@ -1,17 +1,22 @@
 // src/app/api/inngest/route.ts
 
+// The `serve` function from Inngest is used to create the API endpoint
+// that handles all communication with the Inngest Dev Server.
 import { serve } from 'inngest/next'
+
+// This is your Inngest client instance.
 import { inngest } from '@/lib/inngest'
+
+// This is your existing, complex agent function.
 import { runAdeptAgentFn } from '@/modules/jobs/inngest/function'
 
-// Remove the old hello-world import.
-// import { helloWorldFn } from '@/modules/jobs/inngest/hello-world';
+import { codeInterpreterTestFn } from '@/modules/jobs/inngest/code-interpreter-function'
 
-// Import the new E2B test function.
-import { e2bTestFn } from '@/modules/jobs/inngest/e2b-test'
+// This array tells Inngest which functions this application is responsible for.
+// We add our new simple test function to this list.
+const functions = [runAdeptAgentFn, codeInterpreterTestFn]
 
-const functions = [runAdeptAgentFn, e2bTestFn]
-
+// This creates the GET, POST, and PUT handlers that Inngest needs to operate.
 export const { GET, POST, PUT } = serve({
   client: inngest,
   functions,

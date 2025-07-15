@@ -1,27 +1,34 @@
 // src/services/e2b.ts
 
-import { Sandbox } from '@e2b/sdk'
-// It's good practice to import the type for explicit type annotations.
-import type { Sandbox as SandboxType } from '@e2b/sdk'
+// We import the `Sandbox` class by its correct, exported name.
+import { Sandbox } from '@e2b/code-interpreter'
 
 /**
- * A helper function to create a new E2B sandbox.
- * @param {() => Promise<void>} onExit - A callback function to execute when the sandbox exits.
- * @returns {Promise<SandboxType>} A promise that resolves to a new Sandbox instance.
+ * Creates and initializes an E2B Code Interpreter sandbox.
+ * This function encapsulates the setup logic, including API key validation,
+ * and returns a sandbox instance ready for code execution.
+ *
+ * @returns {Promise<Sandbox>} A promise that resolves to an active Sandbox instance.
  */
-export async function createAdeptSandbox(
-  onExit: () => Promise<void>,
-): Promise<SandboxType> {
-  // The Sandbox.create method is where the connection is established.
-  const sandbox: SandboxType = await Sandbox.create({
-    template: 'base',
-    apiKey: process.env.E2B_API_KEY,
+export async function createAdeptCodeInterpreter(): Promise<Sandbox> {
+  // Retrieve the E2B API key from the environment variables.
+  const apiKey = process.env.E2B_API_KEY
 
-    // This is the critical line. It tells the SDK to wait up to 120 seconds
-    // for the sandbox to be ready, which is enough time for a cold start.
-    timeout: 120000, // 120 seconds
+  // Fail fast with a clear error if the API key is not configured.
+  if (!apiKey) {
+    throw new Error('E2B_API_KEY is not defined. Please check your .env file.')
+  }
 
-    onExit,
-  })
+  // Log the initiation of the sandbox creation.
+  console.log('[E2B] Creating Code Interpreter sandbox...')
+
+  // Create a new sandbox instance using the correct `Sandbox` class.
+  const sandbox = await Sandbox.create({ apiKey })
+
+  // This is the fix: The log message no longer references the `.id` property,
+  // which does not exist on the Sandbox type, resolving the TypeScript error.
+  console.log(`[E2B] Sandbox ready.`)
+
+  // Return the active and ready sandbox instance.
   return sandbox
 }
