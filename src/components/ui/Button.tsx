@@ -26,6 +26,10 @@ const buttonVariants = cva(
         default: 'h-10 px-4 py-2',
         sm: 'h-9 rounded-md px-3',
         lg: 'h-11 rounded-md px-8',
+        // This is the new 'icon' size variant. It creates a square button
+        // perfectly suited for holding an icon without text. This resolves
+        // the TypeScript error from page.tsx.
+        icon: 'h-10 w-10',
       },
     },
     // Sets the default variant and size if they are not specified.
