@@ -15,21 +15,32 @@ datasource db {
 
 model User {
     id        String    @id @default(cuid())
-    // The username must be unique and is used for logging in.
     username  String    @unique
-    // The password hash. We never store plain-text passwords.
     password  String
-    // A user can have many sessions, creating a one-to-many relationship.
     sessions  Session[]
+    // --- The Core Fix ---
+    // This line establishes the other side of the relationship,
+    // telling Prisma that a User can have many JobResult records.
+    jobResults JobResult[]
 }
 
 model Session {
     id        String   @id
-    // The user this session belongs to.
     userId    String
-    // The expiration date of the session.
     expiresAt DateTime
+    user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
 
-    // This defines the foreign key relationship to the User model.
-    user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+// This model will store the results of our AI agent jobs.
+model JobResult {
+  id        String   @id
+  userId    String
+  // This now correctly points to the `jobResults` field on the User model.
+  user      User     @relation(fields: [userId], references: [id])
+  data      Json
+  status    String   // "completed" or "failed"
+  error     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
