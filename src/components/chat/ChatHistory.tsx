@@ -1,9 +1,12 @@
 // src/components/chat/ChatHistory.tsx
 'use client'
 
-import { Message, Product } from '@/app/page'
+// UPDATED: Import the new FileObject type
+import { Message, Product, FileObject } from '@/app/page'
 import { MessageToolbar } from './MessageToolbar'
+import { Button } from '@/components/ui/Button'
 
+// This function can remain for backward compatibility or future use cases.
 const groupProducts = (products: Product[]) => {
   return products.reduce(
     (acc, product) => {
@@ -13,6 +16,18 @@ const groupProducts = (products: Product[]) => {
       return acc
     },
     {} as Record<string, Product[]>,
+  )
+}
+
+// NEW: A dedicated type guard function. This is the best practice.
+// It checks if 'content' is our FileObject, and tells TypeScript so.
+function isFileObject(content: unknown): content is FileObject {
+  return (
+    typeof content === 'object' &&
+    content !== null &&
+    // The 'in' operator is the key. It checks for the property's existence
+    // in a way that is fully type-safe and requires no casting.
+    'fileUrl' in content
   )
 }
 
@@ -44,12 +59,30 @@ export const ChatHistory = ({ messages, isJobRunning }: ChatHistoryProps) => (
                   : 'bg-card'
             }`}
           >
-            {typeof message.content === 'string' ? (
-              <p className="whitespace-pre-wrap">{message.content}</p>
-            ) : (
-              <div className="space-y-6">
-                {Object.entries(groupProducts(message.content)).map(
-                  ([group, products]) => (
+            {
+              // --- CLEANED UP: Final rendering logic using the type guard ---
+
+              // 1. Check for our new FileObject type first.
+              isFileObject(message.content) ? (
+                <div className="flex flex-col items-start gap-3">
+                  <p className="font-medium">Your Excel file is ready.</p>
+                  <a
+                    href={message.content.fileUrl} // No error here now
+                    download
+                  >
+                    <Button>Download Report</Button>
+                  </a>
+                </div>
+              ) : // 2. Fallback to check if it's a string.
+              typeof message.content === 'string' ? (
+                <p className="whitespace-pre-wrap">{message.content}</p>
+              ) : // 3. If it's not a string or a file, it must be the Product[] array.
+              // We can safely cast it here because all other possibilities are exhausted.
+              Array.isArray(message.content) ? (
+                <div className="space-y-6">
+                  {Object.entries(
+                    groupProducts(message.content as Product[]),
+                  ).map(([group, products]) => (
                     <div key={group}>
                       <h3 className="mb-2 font-semibold">{group}</h3>
                       <div className="overflow-x-auto">
@@ -77,18 +110,15 @@ export const ChatHistory = ({ messages, isJobRunning }: ChatHistoryProps) => (
                         </table>
                       </div>
                     </div>
-                  ),
-                )}
-              </div>
-            )}
-            {/* Conditionally render image if message.imageUrl exists */}
+                  ))}
+                </div>
+              ) : null
+            }
+
             {message.imageUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={message.imageUrl}
                 alt="Uploaded image"
-                // --- CHANGED: Removed the 'border' and 'border-border' classes ---
-                // This is the fix to remove the unwanted white border around the uploaded image.
                 className="mt-4 max-h-48 w-full rounded-md object-contain"
               />
             )}

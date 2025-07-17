@@ -1,6 +1,6 @@
 // src/modules/jobs/inngest/agent.ts
 
-import { createAgent, openai } from '@inngest/agent-kit'
+import { createAgent, openai } from '@inngest/agent'
 import { SYSTEM_PROMPT } from './prompt'
 import { saveDetectedProducts, type ToolResources } from './tools'
 
@@ -19,7 +19,7 @@ export const adeptAgent = createAgent<ToolResources>({
   tools: [saveDetectedProducts],
 
   // --- The Core Fix ---
-  // Instead of the ambiguous "required" string, we explicitly tell the agent
+  // Instead of the ambiguous "required" string, we explicitly tell the agenta
   // the name of the tool it must call. This resolves the API error.
   tool_choice: 'saveDetectedProducts',
 })

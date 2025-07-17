@@ -19,10 +19,17 @@ export interface Product {
   limit?: string
 }
 
+// Define a type for our file object
+export interface FileObject {
+  fileUrl: string
+  type: 'excel' | string // Allows for 'excel' or other file types in the future
+}
+
 export interface Message {
   id: string
   role: 'user' | 'assistant'
-  content: string | Product[]
+  // 'content' can now also be a FileObject
+  content: string | Product[] | FileObject
   error?: boolean
   imageUrl?: string
 }
