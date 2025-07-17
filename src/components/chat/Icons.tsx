@@ -93,3 +93,22 @@ export const SendIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <path d="M12 19V5" />
   </svg>
 )
+
+// UPDATED ICON: XIcon with increased strokeWidth for bolder appearance
+export const XIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg
+    {...props}
+    xmlns="http://www.w3.org/2000/svg"
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="3" // Increased from 2 to 3 for a bolder line
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M18 6 6 18" />
+    <path d="m6 6 12 12" />
+  </svg>
+)

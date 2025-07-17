@@ -1,10 +1,9 @@
 // src/components/chat/ChatHistory.tsx
 'use client'
 
-import { Message, Product } from '@/app/page' // Importing types. Will be moved to a central types file later.
+import { Message, Product } from '@/app/page'
 import { MessageToolbar } from './MessageToolbar'
 
-// Helper function to group products. Good candidate to be moved to `src/lib/utils.ts` later.
 const groupProducts = (products: Product[]) => {
   return products.reduce(
     (acc, product) => {
@@ -17,13 +16,11 @@ const groupProducts = (products: Product[]) => {
   )
 }
 
-// Prop interface for the chat history component.
 interface ChatHistoryProps {
   messages: Message[]
   isJobRunning: boolean
 }
 
-// Renders the list of messages in the active chat view.
 export const ChatHistory = ({ messages, isJobRunning }: ChatHistoryProps) => (
   <div className="mx-auto max-w-4xl space-y-8">
     {messages.map((message) => (
@@ -33,26 +30,23 @@ export const ChatHistory = ({ messages, isJobRunning }: ChatHistoryProps) => (
             className={`mt-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${
               message.role === 'user'
                 ? 'bg-primary text-primary-foreground'
-                : 'bg-card-foreground text-card' // Avatars remain distinct.
+                : 'bg-card-foreground text-card'
             }`}
           >
             {message.role === 'user' ? 'U' : 'A'}
           </span>
           <div
-            // REFINED: Conditional styling for message bubbles based on role and error status,
-            // strictly following the latest explicit instructions for borders.
             className={`w-full max-w-[80%] rounded-lg p-4 ${
               message.role === 'user'
-                ? 'bg-card border' // User messages: Have a subtle card background and a border.
+                ? 'bg-card border border-gray-700'
                 : message.error
-                  ? 'bg-destructive/10 text-destructive-foreground' // Error messages: Have a destructive background, but NO border.
-                  : 'bg-card' // Agent messages (non-error): Have a subtle card background, but NO border.
+                  ? 'bg-destructive/10 border-destructive text-destructive-foreground border'
+                  : 'bg-card'
             }`}
           >
             {typeof message.content === 'string' ? (
               <p className="whitespace-pre-wrap">{message.content}</p>
             ) : (
-              // The product data table rendering logic remains correct and unchanged here.
               <div className="space-y-6">
                 {Object.entries(groupProducts(message.content)).map(
                   ([group, products]) => (
@@ -87,9 +81,19 @@ export const ChatHistory = ({ messages, isJobRunning }: ChatHistoryProps) => (
                 )}
               </div>
             )}
+            {/* Conditionally render image if message.imageUrl exists */}
+            {message.imageUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={message.imageUrl}
+                alt="Uploaded image"
+                // --- CHANGED: Removed the 'border' and 'border-border' classes ---
+                // This is the fix to remove the unwanted white border around the uploaded image.
+                className="mt-4 max-h-48 w-full rounded-md object-contain"
+              />
+            )}
           </div>
         </div>
-        {/* The toolbar for assistant messages. */}
         {message.role === 'assistant' && !isJobRunning && !message.error && (
           <div className="ml-10">
             <MessageToolbar />

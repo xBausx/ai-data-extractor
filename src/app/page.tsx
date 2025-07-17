@@ -11,7 +11,6 @@ import { EmptyState } from '@/components/chat/EmptyState'
 import { ChatInputForm } from '@/components/chat/ChatInputForm'
 import { UserNav } from '@/components/auth/UserNav'
 
-// These types could be moved to a dedicated `types.ts` file for cleanliness.
 export interface Product {
   group: string
   name: string
@@ -25,6 +24,7 @@ export interface Message {
   role: 'user' | 'assistant'
   content: string | Product[]
   error?: boolean
+  imageUrl?: string
 }
 
 const Spinner = () => (
@@ -58,21 +58,43 @@ export default function Home() {
 
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
-  const [imageUrl] = useState('https://i.imgur.com/snMdp9T.jpeg') // Still temporarily hardcoded
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([])
+  const [isFileUploading, setIsFileUploading] = useState(false)
   const [runningEventId, setRunningEventId] = useState<string | null>(null)
 
   const { data: session, isLoading: isSessionLoading } =
     trpc.auth.getSession.useQuery()
   const signOutMutation = trpc.auth.signOut.useMutation({
-    // FIX: Change router.refresh() to router.push('/login') for a definitive logout redirect.
-    // This ensures the browser's session cookie is cleared and the authentication state
-    // is correctly re-evaluated on the new login page, avoiding caching issues.
     onSuccess: () => router.push('/login'),
   })
   const { data: polledResult } = trpc.auth.getJobResult.useQuery(
     { eventId: runningEventId! },
     { enabled: !!runningEventId, refetchInterval: 2000 },
   )
+
+  const generateSignedUrlMutation = trpc.auth.generateSignedUrl.useMutation({
+    onError: (error) => {
+      console.error('Failed to get signed URL:', error)
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: `Failed to prepare image for upload: ${error.message}`,
+          error: true,
+        },
+      ])
+      setIsFileUploading(false)
+      selectedFiles.forEach((_, index) => {
+        if (imagePreviewUrls[index])
+          URL.revokeObjectURL(imagePreviewUrls[index])
+      })
+      setSelectedFiles([])
+      setImagePreviewUrls([])
+    },
+  })
+
   const extractProductsMutation = trpc.auth.triggerInngestTest.useMutation({
     onSuccess: (data) => {
       setRunningEventId(data.eventId)
@@ -80,6 +102,13 @@ export default function Home() {
         ...prev,
         { id: data.eventId, role: 'assistant', content: 'Agent is working...' },
       ])
+      setIsFileUploading(false)
+      selectedFiles.forEach((_, index) => {
+        if (imagePreviewUrls[index])
+          URL.revokeObjectURL(imagePreviewUrls[index])
+      })
+      setSelectedFiles([])
+      setImagePreviewUrls([])
     },
     onError: (error) => {
       setMessages((prev) => [
@@ -87,12 +116,45 @@ export default function Home() {
         {
           id: Date.now().toString(),
           role: 'assistant',
-          content: `Error: ${error.message}`,
+          content: `Error triggering extraction: ${error.message}`,
           error: true,
         },
       ])
+      setIsFileUploading(false)
+      selectedFiles.forEach((_, index) => {
+        if (imagePreviewUrls[index])
+          URL.revokeObjectURL(imagePreviewUrls[index])
+      })
+      setSelectedFiles([])
+      setImagePreviewUrls([])
     },
   })
+
+  const handleFileSelect = (file: File | undefined) => {
+    if (file) {
+      const previewUrl = URL.createObjectURL(file)
+      setSelectedFiles((prev) => [...prev, file])
+      setImagePreviewUrls((prev) => [...prev, previewUrl])
+      setInput('')
+    }
+  }
+
+  const handleClearImageByIndex = (indexToClear: number) => {
+    if (imagePreviewUrls[indexToClear]) {
+      URL.revokeObjectURL(imagePreviewUrls[indexToClear])
+    }
+    setSelectedFiles((prev) => prev.filter((_, idx) => idx !== indexToClear))
+    setImagePreviewUrls((prev) => prev.filter((_, idx) => idx !== indexToClear))
+    if (selectedFiles.length === 1 && input.trim() === '') {
+      setInput('')
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      imagePreviewUrls.forEach((url) => URL.revokeObjectURL(url))
+    }
+  }, [imagePreviewUrls])
 
   useEffect(() => {
     if (polledResult) {
@@ -130,24 +192,126 @@ export default function Home() {
     })
   }, [messages])
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    // For now, if no input, simply return. Image upload will handle the imageUrl source later.
-    if (!input.trim()) return
-    // Temporarily, if imageUrl is empty for some reason, return. This will be dynamic later.
-    if (!imageUrl.trim()) return
 
+    if (
+      isJobRunning ||
+      extractProductsMutation.isPending ||
+      generateSignedUrlMutation.isPending ||
+      isFileUploading
+    ) {
+      return
+    }
+
+    const userMessageContent = input.trim()
+    let extractionImageUrl: string | undefined
+
+    const fileToProcess = selectedFiles[0]
+
+    if (fileToProcess) {
+      setIsFileUploading(true)
+      try {
+        const { uploadUrl, fileUrl } =
+          await generateSignedUrlMutation.mutateAsync({
+            count: 1,
+            fileType: fileToProcess.type,
+          })
+
+        const uploadResponse = await fetch(uploadUrl, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': fileToProcess.type,
+          },
+          body: fileToProcess,
+        })
+
+        if (!uploadResponse.ok) {
+          const errorText = await uploadResponse.text()
+          console.error('S3 upload failed:', uploadResponse.status, errorText)
+          throw new Error(
+            `Failed to upload image to S3: ${uploadResponse.status} ${uploadResponse.statusText}`,
+          )
+        }
+
+        extractionImageUrl = fileUrl
+        console.log('Image successfully uploaded to S3:', extractionImageUrl)
+      } catch (uploadError) {
+        console.error('Image upload process failed:', uploadError)
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: Date.now().toString(),
+            role: 'assistant',
+            content: `Image upload failed: ${uploadError instanceof Error ? uploadError.message : String(uploadError)}`,
+            error: true,
+          },
+        ])
+        setIsFileUploading(false)
+        selectedFiles.forEach((_, index) => {
+          if (imagePreviewUrls[index])
+            URL.revokeObjectURL(imagePreviewUrls[index])
+        })
+        setSelectedFiles([])
+        setImagePreviewUrls([])
+        return
+      }
+    } else {
+      if (!userMessageContent) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: Date.now().toString(),
+            role: 'assistant',
+            content: 'Please enter a prompt or upload an image to begin.',
+            error: true,
+          },
+        ])
+        return
+      }
+      console.warn(
+        'Attempted to submit text-only prompt without a valid image URL for extraction.',
+      )
+    }
+
+    // --- CHANGED: Simplified the user message object construction ---
+    // The user's message in the chat will now only contain their raw text prompt.
+    // The uploaded image is displayed visually, so we no longer need to add "(Images: ...)" to the text.
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: input,
+      content: userMessageContent, // Directly use the trimmed user input.
+      imageUrl: extractionImageUrl, // Pass the S3 URL to display the image.
     }
     setMessages((prev) => [...prev, userMessage])
-    extractProductsMutation.mutate({ fileUrl: imageUrl, userPrompt: input })
+
+    if (extractionImageUrl) {
+      extractProductsMutation.mutate({
+        fileUrl: extractionImageUrl,
+        userPrompt: input,
+      })
+    } else {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now().toString(),
+          role: 'assistant',
+          content: 'No image provided for extraction. Please upload an image.',
+          error: true,
+        },
+      ])
+      setIsFileUploading(false)
+    }
+
     setInput('')
   }
 
   const isJobRunning = !!runningEventId
+  const isFormDisabled =
+    isJobRunning ||
+    extractProductsMutation.isPending ||
+    generateSignedUrlMutation.isPending ||
+    isFileUploading
 
   if (isSessionLoading) {
     return <Spinner />
@@ -156,7 +320,6 @@ export default function Home() {
   return (
     <div className="bg-background flex h-screen w-full flex-col">
       {!session?.user ? (
-        // Render login/signup options if no user session
         <main className="flex flex-1 flex-col items-center justify-center p-4">
           <h2 className="mb-4 text-2xl font-semibold">Welcome</h2>
           <p className="text-muted-foreground mb-8">
@@ -172,24 +335,15 @@ export default function Home() {
           </div>
         </main>
       ) : (
-        // --- REFACTORED: Logged-in view now always includes header and footer ---
-        // This outer div ensures the full page height and column layout for logged-in users.
         <div className="flex flex-1 flex-col overflow-hidden">
-          {/* The header is now consistently rendered for logged-in users. */}
-          {/* Removed `border-b` from header, rely on `shadow-sm` for visual separation. */}
           <header className="bg-background sticky top-0 z-10 flex h-16 items-center justify-between px-4 shadow-sm md:px-6">
             <h1 className="text-xl font-bold">Adept AI Extractor</h1>
-            {/* UserNav component is directly rendered here, without debugging styles. */}
             <UserNav user={session.user} signOut={signOutMutation.mutate} />
           </header>
 
-          {/* This main section dynamically renders either EmptyState or ChatHistory. */}
-          {/* It spans the remaining vertical space between the header and footer. */}
           {messages.length === 0 ? (
-            // EmptyState is now rendered directly without children, as it contains the welcome message itself.
             <EmptyState />
           ) : (
-            // Render active chat state if user is logged in and messages exist
             <main
               ref={chatContainerRef}
               className="flex-1 overflow-y-auto p-4 md:p-6"
@@ -198,15 +352,16 @@ export default function Home() {
             </main>
           )}
 
-          {/* The footer is now consistently rendered for logged-in users. */}
-          {/* Removed `border-t` from footer, rely on `shadow-sm` for visual separation. */}
           <footer className="bg-background sticky bottom-0 z-10 p-4 shadow-sm">
             <div className="mx-auto max-w-4xl">
-              {/* The ChatInputForm is now consistently here, and only here. */}
               <ChatInputForm
                 input={input}
                 setInput={setInput}
                 handleSubmit={handleSubmit}
+                onFileSelect={handleFileSelect}
+                imagePreviewUrls={imagePreviewUrls}
+                onClearImageByIndex={handleClearImageByIndex}
+                isFileUploading={isFormDisabled}
                 isJobRunning={isJobRunning}
                 isPending={extractProductsMutation.isPending}
               />
