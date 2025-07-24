@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
 import { UploadIcon, SendIcon, XIcon } from './Icons'
 
-// Prop interface for our reusable form component.
+// UPDATED: Added isFileUploadDisabled to the prop interface.
 interface ChatInputFormProps {
   input: string
   setInput: (value: string) => void
@@ -17,9 +17,9 @@ interface ChatInputFormProps {
   isFileUploading: boolean
   imagePreviewUrls: string[]
   onClearImageByIndex: (index: number) => void
+  isFileUploadDisabled: boolean // <-- NEW PROP
 }
 
-// A reusable component for the chat input form.
 export const ChatInputForm = ({
   input,
   setInput,
@@ -30,6 +30,7 @@ export const ChatInputForm = ({
   isFileUploading,
   imagePreviewUrls,
   onClearImageByIndex,
+  isFileUploadDisabled, // <-- NEW PROP
 }: ChatInputFormProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -47,12 +48,12 @@ export const ChatInputForm = ({
   }
 
   return (
+    // The main form container is unchanged.
     <form
       onSubmit={handleSubmit}
-      // UPDATED: Changed border color to gray-600 and increased thickness to border-2 for visibility.
       className="bg-card relative flex flex-col rounded-xl border-2 border-gray-600 p-2 shadow-lg"
     >
-      {/* Hidden file input */}
+      {/* Hidden file input remains unchanged */}
       <input
         type="file"
         ref={fileInputRef}
@@ -62,7 +63,7 @@ export const ChatInputForm = ({
         multiple
       />
 
-      {/* Image Previews Container - Renders above the input field */}
+      {/* Image Previews Container remains unchanged */}
       {imagePreviewUrls.length > 0 && (
         <div className="flex items-center gap-2 overflow-x-auto pb-2">
           {imagePreviewUrls.map((url, index) => (
@@ -72,7 +73,6 @@ export const ChatInputForm = ({
                 alt={`Selected Image Preview ${index + 1}`}
                 className="border-border h-16 w-16 rounded-md border object-cover"
               />
-              {/* Dismiss Button for each image preview */}
               <Button
                 type="button"
                 size="icon"
@@ -106,7 +106,14 @@ export const ChatInputForm = ({
             size="icon"
             variant="ghost"
             className="h-8 w-8"
-            disabled={isJobRunning || isPending || isFileUploading}
+            // --- UPDATED: The disabled state now also checks our new prop ---
+            // This button will now be disabled if a job is running OR if we are in an update context.
+            disabled={
+              isJobRunning ||
+              isPending ||
+              isFileUploading ||
+              isFileUploadDisabled
+            }
             onClick={handleUploadClick}
           >
             <UploadIcon className="h-5 w-5" />
