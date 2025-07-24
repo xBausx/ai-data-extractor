@@ -9,181 +9,188 @@ import type { Sandbox } from '@e2b/code-interpreter'
 import fs from 'fs'
 import path from 'path'
 import { SYSTEM_PROMPT } from './prompt'
-// NEW: Import the S3 Client and PutObjectCommand for uploading
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 
-const eventPayloadSchema = z.object({
+/**
+ * Defines the schema for a single product object, including optional fields.
+ */
+const productSchema = z.object({
+  group: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+  price: z.string().optional(),
+  limit: z.string().optional(),
+})
+
+/**
+ * Defines the schema for the expected output from the Python script for all data operations.
+ */
+const pythonOutputSchema = z.object({
+  products: z.array(productSchema),
+})
+
+/**
+ * Defines the schema for the payload of the 'app/agent.run' event.
+ */
+const extractEventPayloadSchema = z.object({
   fileUrl: z.string().url(),
   userPrompt: z.string(),
   userId: z.string(),
 })
 
-// NEW: Define constants for our S3 configuration.
-const BUCKET_REGION = 'us-east-1'
-const BUCKET_NAME = 'ai-extractor-bucket'
+/**
+ * Defines the schema for the payload of the 'app/agent.update' event.
+ */
+const updateEventPayloadSchema = z.object({
+  existingData: z.array(productSchema),
+  userPrompt: z.string(),
+  userId: z.string(),
+})
 
-// NEW: Instantiate the S3 client once, outside the handler.
-const s3 = new S3Client({ region: BUCKET_REGION })
+/**
+ * Defines the schema for the payload of the 'app/agent.finalize' event.
+ */
+const finalizeEventPayloadSchema = z.object({
+  finalData: z.array(productSchema),
+  userId: z.string(),
+})
 
 export const runAdeptAgentFn = inngest.createFunction(
   { id: 'run-adept-agent-fn' },
-  { event: 'app/agent.run' },
+  [
+    { event: 'app/agent.run' },
+    { event: 'app/agent.update' },
+    { event: 'app/agent.finalize' },
+  ],
   async ({ event, step }) => {
     const { id: eventId, data: eventData } = event
-    const { userPrompt, fileUrl, userId } = eventPayloadSchema.parse(eventData)
 
     if (!eventId) {
       throw new Error(`Inngest event was triggered without an event ID.`)
     }
 
-    const fileBase64 = await step.run('extract-and-format-data', async () => {
-      // This inner part remains the same as before.
-      const sandbox: Sandbox = await createAdeptCodeInterpreter()
-      try {
-        // STEP 1: Install Dependencies
-        await sandbox.runCode('!pip install openai requests openpyxl')
+    const result = await step.run('run-agent-in-sandbox', async () => {
+      const sandbox: Sandbox = await createAdeptCodeInterpreter({
+        OPENAI_API_KEY: process.env.OPENAI_API_KEY!,
+      })
 
-        // STEP 2: Run Extractor
-        const extractorScriptTemplate = fs.readFileSync(
+      try {
+        let userId: string
+        // The payload object now has a stricter type, as all its values are strings.
+        let payload: Record<string, string> = {}
+
+        // Prepare the payload object based on the event type.
+        if (event.name === 'app/agent.run') {
+          console.log('[Inngest] Preparing payload for EXTRACT mode.')
+          const {
+            userPrompt,
+            fileUrl,
+            userId: id,
+          } = extractEventPayloadSchema.parse(eventData)
+          userId = id
+          payload = {
+            operation_mode: 'extract',
+            user_prompt: userPrompt,
+            system_prompt: SYSTEM_PROMPT,
+            image_url: fileUrl,
+          }
+        } else if (event.name === 'app/agent.update') {
+          console.log('[Inngest] Preparing payload for UPDATE mode.')
+          const {
+            userPrompt,
+            existingData,
+            userId: id,
+          } = updateEventPayloadSchema.parse(eventData)
+          userId = id
+          payload = {
+            operation_mode: 'update',
+            user_prompt: userPrompt,
+            system_prompt: SYSTEM_PROMPT,
+            existing_data_json: JSON.stringify({ products: existingData }),
+          }
+        } else if (event.name === 'app/agent.finalize') {
+          console.log('[Inngest] Preparing payload for FINALIZE mode.')
+          const { finalData, userId: id } =
+            finalizeEventPayloadSchema.parse(eventData)
+          userId = id
+          payload = {
+            operation_mode: 'finalize',
+            final_data_json: JSON.stringify({ products: finalData }),
+          }
+        } else {
+          throw new Error(`Unsupported event type: ${event.name}`)
+        }
+
+        // 1. Convert payload to a Base64 string to ensure it's safely transmittable.
+        const payloadString = JSON.stringify(payload)
+        const base64Payload = Buffer.from(payloadString).toString('base64')
+
+        // 2. Create a small Python script to decode the Base64 string and write it to a file.
+        const writerCode = `
+import base64
+encoded_payload = "${base64Payload}"
+decoded_payload = base64.b64decode(encoded_payload).decode('utf-8')
+with open('/home/user/input.json', 'w') as f:
+    f.write(decoded_payload)
+`
+
+        // 3. Execute the writer script to create the input.json file inside the sandbox.
+        console.log('[Inngest] Writing payload to input.json in sandbox...')
+        await sandbox.runCode(writerCode)
+        console.log('[Inngest] Payload file created successfully.')
+
+        const pythonCode = fs.readFileSync(
           path.join(
             process.cwd(),
             'src/modules/jobs/inngest/scripts/extract_products.py',
           ),
           'utf-8',
         )
-        const modifiedExtractorScript = extractorScriptTemplate.replace(
-          'print(json.dumps(arguments))',
-          'products_json_str = json.dumps(arguments)',
-        )
-        const extractorPythonCode = modifiedExtractorScript
-          .replace('__IMAGE_URL__', fileUrl)
-          .replace('__USER_PROMPT__', userPrompt)
-          .replace('__SYSTEM_PROMPT__', SYSTEM_PROMPT)
 
-        await sandbox.runCode(extractorPythonCode, {
-          envs: { OPENAI_API_KEY: process.env.OPENAI_API_KEY! },
-        })
+        await sandbox.runCode('!pip install openai requests')
+        console.log('[Inngest] Executing main Python script...')
+        const execution = await sandbox.runCode(pythonCode)
 
-        // --- STEP 3: Run Formatter and Get Base64 Output ---
-        const formatterPythonCode = `
-            import json
-            import openpyxl
-            import base64
-            # NEW: Import 'get_column_letter' to help with setting column widths
-            from openpyxl.utils import get_column_letter
-
-            # Access the variable created in the previous step
-            data = json.loads(products_json_str)
-            products = data.get('products', [])
-
-            # Create a new Excel workbook
-            wb = openpyxl.Workbook()
-            ws = wb.active
-            ws.title = "Extracted Products"
-
-            # Write headers
-            headers = ["Group", "Name", "Description", "Price", "Limit"]
-            ws.append(headers)
-
-            # Write product data
-            for product in products:
-                row = [
-                    product.get('group', ''),
-                    product.get('name', ''),
-                    product.get('description', ''),
-                    product.get('price', ''),
-                    product.get('limit', '')
-                ]
-                ws.append(row)
-
-            # --- NEW: Auto-fit column widths ---
-            # Loop through all the columns in the worksheet
-            for col in ws.columns:
-                max_length = 0
-                # Get the column letter (e.g., 'A', 'B', 'C')
-                column = get_column_letter(col[0].column)
-                # Loop through all cells in the column to find the longest content length
-                for cell in col:
-                    try:
-                        if len(str(cell.value)) > max_length:
-                            max_length = len(str(cell.value))
-                    except:
-                        pass
-                # Add a little extra padding to the width
-                adjusted_width = (max_length + 2)
-                # Set the column's width
-                ws.column_dimensions[column].width = adjusted_width
-
-            # Save the file to a temporary path
-            output_filename = "/tmp/extracted_data.xlsx"
-            wb.save(output_filename)
-
-            # Read the binary content of the saved file
-            with open(output_filename, "rb") as excel_file:
-                # Encode the content to a Base64 string
-                encoded_string = base64.b64encode(excel_file.read()).decode('utf-8')
-
-            # Print the Base64 encoded string as the final output
-            print(encoded_string)
-          `
-        const formatterExecution = await sandbox.runCode(formatterPythonCode)
-        if (formatterExecution.error) {
+        const sandboxLogs = execution.logs.stderr.join('\n')
+        if (execution.error) {
           throw new Error(
-            `Formatter execution failed: ${formatterExecution.error.value}`,
+            `Sandbox execution failed: ${execution.error.name}: ${execution.error.value}\nLogs:\n${sandboxLogs}`,
           )
         }
 
-        return formatterExecution.logs.stdout.join('\n').trim()
+        const lastStdoutLine =
+          execution.logs.stdout[execution.logs.stdout.length - 1]
+
+        return {
+          jsonData: JSON.parse(lastStdoutLine),
+          logs: sandboxLogs,
+          userId,
+        }
       } finally {
         console.log('[Inngest] Sandbox execution finished.')
       }
     })
 
-    // --- NEW: UPLOAD TO S3 & SAVE URL ---
-    const s3Url = await step.run('upload-file-to-s3', async () => {
-      // Decode the Base64 string back into binary data
-      const fileBuffer = Buffer.from(fileBase64, 'base64')
-
-      // Create a unique key (filename) for the S3 object
-      const s3Key = `exports/${eventId}-${Date.now()}.xlsx`
-
-      const command = new PutObjectCommand({
-        Bucket: BUCKET_NAME,
-        Key: s3Key,
-        Body: fileBuffer,
-        ContentType:
-          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      })
-
-      // Upload the file
-      await s3.send(command)
-
-      // Construct the public URL of the uploaded file
-      const publicUrl = `https://${BUCKET_NAME}.s3.${BUCKET_REGION}.amazonaws.com/${s3Key}`
-      console.log(`[Inngest] Successfully uploaded Excel file to ${publicUrl}`)
-
-      return publicUrl
-    })
-
-    // --- FINAL STEP: Save S3 URL to the database ---
     try {
+      const { jsonData, logs, userId } = result
+      const validatedData = pythonOutputSchema.parse(jsonData)
       await db.jobResult.create({
         data: {
           id: eventId,
           userId: userId,
           status: 'completed',
-          // Save the S3 URL to the database
-          data: { fileUrl: s3Url, type: 'excel' } as Prisma.InputJsonValue,
+          data: validatedData.products as Prisma.InputJsonValue,
+          error: logs,
         },
       })
-      console.log(
-        `[Inngest] Job ${eventId} result saved to database with S3 URL.`,
-      )
-      return { success: true, eventId: eventId }
+      return { success: true, eventId }
     } catch (error) {
-      console.error(`[Inngest] Job ${eventId} failed during DB save:`, error)
+      console.error(`[Inngest] Job ${eventId} failed:`, error)
       const errorMessage =
         error instanceof Error ? error.message : String(error)
+
+      // Safely parses the event data to extract the userId for error logging, avoiding 'any'.
+      const { userId } = z.object({ userId: z.string() }).parse(event.data)
+
       await db.jobResult.create({
         data: {
           id: eventId,

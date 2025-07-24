@@ -1,16 +1,19 @@
 // src/services/e2b.ts
 
-// We import the `Sandbox` class by its correct, exported name.
-import { Sandbox } from '@e2b/code-interpreter'
+// We import the `Sandbox` and `RunCodeOpts` types.
+import { Sandbox, RunCodeOpts } from '@e2b/code-interpreter'
 
 /**
- * Creates and initializes an E2B Code Interpreter sandbox.
+ * Creates and initializes an E2B Code Interpreter sandbox with specified environment variables.
  * This function encapsulates the setup logic, including API key validation,
  * and returns a sandbox instance ready for code execution.
  *
+ * @param {RunCodeOpts['envs']} envs - An object containing environment variables to be set in the sandbox.
  * @returns {Promise<Sandbox>} A promise that resolves to an active Sandbox instance.
  */
-export async function createAdeptCodeInterpreter(): Promise<Sandbox> {
+export async function createAdeptCodeInterpreter(
+  envs: RunCodeOpts['envs'] = {},
+): Promise<Sandbox> {
   // Retrieve the E2B API key from the environment variables.
   const apiKey = process.env.E2B_API_KEY
 
@@ -22,11 +25,13 @@ export async function createAdeptCodeInterpreter(): Promise<Sandbox> {
   // Log the initiation of the sandbox creation.
   console.log('[E2B] Creating Code Interpreter sandbox...')
 
-  // Create a new sandbox instance using the correct `Sandbox` class.
-  const sandbox = await Sandbox.create({ apiKey })
+  // Create a new sandbox instance, passing the API key and all required environment variables.
+  // This ensures all variables are available to the sandbox from its creation.
+  const sandbox = await Sandbox.create({
+    apiKey,
+    envs,
+  })
 
-  // This is the fix: The log message no longer references the `.id` property,
-  // which does not exist on the Sandbox type, resolving the TypeScript error.
   console.log(`[E2B] Sandbox ready.`)
 
   // Return the active and ready sandbox instance.
