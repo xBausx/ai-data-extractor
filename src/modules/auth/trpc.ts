@@ -13,19 +13,13 @@ import {
 import { lucia } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { Prisma } from '@prisma/client'
+// Import the centralized product schema.
+import { productSchema } from '@/lib/types'
 
 const argon2id = new Argon2id()
 
-/**
- * Defines the schema for a single product, used for type validation in procedures.
- */
-const productSchema = z.object({
-  group: z.string(),
-  name: z.string(),
-  description: z.string().optional(),
-  price: z.string().optional(),
-  limit: z.string().optional(),
-})
+// The local productSchema definition has been removed.
+// We will now use the imported schema as our single source of truth.
 
 export const authRouter = createTRPCRouter({
   /**
@@ -197,7 +191,7 @@ export const authRouter = createTRPCRouter({
     }),
 
   /**
-   * Triggers a job to finalize the extracted and corrected data, generating a final file.
+   * Triggers a job to finalize the extracted and corrected data.
    */
   triggerAgentFinalize: protectedProcedure
     .input(

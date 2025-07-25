@@ -24,7 +24,8 @@ try:
     if not OPERATION_MODE:
         raise ValueError("The 'operation_mode' is missing from input.json.")
 
-    # --- Tool Schemas (Unchanged) ---
+    # --- Tool Schemas ---
+    # This schema is now updated to match the new data structure.
     PRODUCT_DATA_SCHEMA = {
         "type": "object",
         "properties": {
@@ -33,13 +34,13 @@ try:
                 "items": {
                     "type": "object",
                     "properties": {
-                        "group": {"type": "string"},
-                        "name": {"type": "string"},
-                        "description": {"type": "string"},
+                        "product_name": {"type": "string"},
+                        "product_description": {"type": "string"},
                         "price": {"type": "string"},
-                        "limit": {"type": "string"}
+                        "limit": {"type": "string"},
+                        "physical_product_description": {"type": "string"}
                     },
-                    "required": ["group", "name"]
+                    "required": ["product_name", "physical_product_description"]
                 }
             }
         },
@@ -148,18 +149,22 @@ try:
         if not FINAL_DATA_JSON:
             raise ValueError("The 'final_data_json' field is missing from input.json for 'finalize' mode.")
 
+        # The input is expected to be a stringified JSON of a { products: [...] } object.
         final_data_from_input = json.loads(FINAL_DATA_JSON)
         if "products" not in final_data_from_input:
             raise ValueError("No valid 'products' array found in final data for finalize operation.")
         
-        output_data = final_data_from_input
+        # We now explicitly structure the output to match the required format.
+        output_data = {"products": final_data_from_input["products"]}
         print("Final JSON data prepared for output.", file=sys.stderr)
 
     else:
         raise ValueError(f"Unknown operation mode: {OPERATION_MODE}")
 
+    # Prints the final JSON output to stdout for the Inngest function to capture.
     print(json.dumps(output_data))
 
 except Exception as e:
+    # Captures and prints any exceptions to stderr, then re-raises to indicate failure.
     print(f"An error occurred in the Python script: {e}", file=sys.stderr)
     raise e

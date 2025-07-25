@@ -21,12 +21,6 @@ const productSchema = z.object({
     .number()
     .optional()
     .describe('The price of the product, if available.'),
-  // A category or group for the product, for logical organization.
-  group: z
-    .string()
-    .describe(
-      'The category or group this product belongs to, e.g., "Fruits", "Dairy", "Electronics".',
-    ),
 })
 
 /**
