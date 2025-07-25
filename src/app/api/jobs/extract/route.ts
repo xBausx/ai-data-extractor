@@ -3,18 +3,46 @@
 import { NextResponse } from 'next/server'
 import { inngest } from '@/lib/inngest'
 import { z } from 'zod'
-import { db } from '@/lib/db' // Import the database client
+import { db } from '@/lib/db'
 
-/**
- * Defines the expected schema for the incoming request body.
- */
 const extractRequestSchema = z.object({
   imageUrl: z.string().url(),
   userPrompt: z.string().optional(),
 })
 
 /**
- * API endpoint for starting a new data extraction job.
+ * @swagger
+ * /api/jobs/extract:
+ *   post:
+ *     summary: Starts a new data extraction job.
+ *     description: Accepts an image URL and an optional user prompt to initiate an asynchronous data extraction process.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               imageUrl:
+ *                 type: string
+ *                 format: uri
+ *                 example: "https://d1csarkz8obe9u.cloudfront.net/posterpreviews/supermarket-grocery-flyer-template-design-62d4bac98ec3e801492f00d5cac7df1f_screen.jpg?ts=1698450919"
+ *               userPrompt:
+ *                 type: string
+ *                 example: "Extract all products from this flyer."
+ *     responses:
+ *       '202':
+ *         description: Job accepted for processing. The `jobId` in the response should be used to poll for the result.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 jobId:
+ *                   type: string
+ *                   example: "01K10AJ2H6JG8GHBRG4TN1X4KN"
+ *       '400':
+ *         description: Invalid request body.
  */
 export async function POST(request: Request) {
   try {
@@ -33,7 +61,6 @@ export async function POST(request: Request) {
 
     const { imageUrl, userPrompt } = parsedBody.data
 
-    // 1. Trigger the Inngest job to get an event ID.
     console.log(`[API] Sending 'app/agent.run' event for imageUrl: ${imageUrl}`)
     const { ids } = await inngest.send({
       name: 'app/agent.run',
@@ -46,18 +73,15 @@ export async function POST(request: Request) {
     const eventId = ids[0]
     console.log(`[API] Inngest event sent with eventId: ${eventId}`)
 
-    // 2. Immediately create a "pending" record in the database.
-    // This solves the race condition and provides an immediate status for polling clients.
     await db.jobResult.create({
       data: {
         id: eventId,
         status: 'pending',
-        data: {}, // Start with empty data
+        data: {},
       },
     })
     console.log(`[API] Created pending job record for eventId: ${eventId}`)
 
-    // 3. Respond with the jobId.
     return NextResponse.json({ jobId: eventId }, { status: 202 })
   } catch (error) {
     console.error('[API] Error in /api/jobs/extract:', error)
