@@ -1,34 +1,22 @@
 // src/components/chat/ChatHistory.tsx
 'use client'
 
-// UPDATED: Import the new FileObject type
-import { Message, Product, FileObject } from '@/app/page'
+// Import the Product type from our new single source of truth.
+import { type Product } from '@/lib/types'
+// Import the other types from their correct location.
+import { type Message, type FileObject } from '@/app/chat/page'
+
 import { MessageToolbar } from './MessageToolbar'
 import { Button } from '@/components/ui/Button'
+import ReactMarkdown from 'react-markdown'
 
-// This function can remain for backward compatibility or future use cases.
-const groupProducts = (products: Product[]) => {
-  return products.reduce(
-    (acc, product) => {
-      const group = product.group || 'Uncategorized'
-      if (!acc[group]) acc[group] = []
-      acc[group].push(product)
-      return acc
-    },
-    {} as Record<string, Product[]>,
-  )
-}
-
-// NEW: A dedicated type guard function. This is the best practice.
-// It checks if 'content' is our FileObject, and tells TypeScript so.
+/**
+ * A type guard function to check if the content is a FileObject.
+ * @param content - The content to check, of unknown type.
+ * @returns {boolean} - True if the content is a FileObject, false otherwise.
+ */
 function isFileObject(content: unknown): content is FileObject {
-  return (
-    typeof content === 'object' &&
-    content !== null &&
-    // The 'in' operator is the key. It checks for the property's existence
-    // in a way that is fully type-safe and requires no casting.
-    'fileUrl' in content
-  )
+  return typeof content === 'object' && content !== null && 'fileUrl' in content
 }
 
 interface ChatHistoryProps {
@@ -59,61 +47,57 @@ export const ChatHistory = ({ messages, isJobRunning }: ChatHistoryProps) => (
                   : 'bg-card'
             }`}
           >
-            {
-              // --- CLEANED UP: Final rendering logic using the type guard ---
-
-              // 1. Check for our new FileObject type first.
-              isFileObject(message.content) ? (
-                <div className="flex flex-col items-start gap-3">
-                  <p className="font-medium">Your Excel file is ready.</p>
-                  <a
-                    href={message.content.fileUrl} // No error here now
-                    download
-                  >
-                    <Button>Download Report</Button>
-                  </a>
+            {isFileObject(message.content) ? (
+              <div className="flex flex-col items-start gap-3">
+                <p className="font-medium">Your file is ready.</p>
+                <a href={message.content.fileUrl} download>
+                  <Button>Download Report</Button>
+                </a>
+              </div>
+            ) : typeof message.content === 'string' ? (
+              <div className="prose prose-sm dark:prose-invert">
+                <ReactMarkdown
+                  components={{
+                    p: ({ ...props }) => (
+                      <p className="mb-2 last:mb-0" {...props} />
+                    ),
+                  }}
+                >
+                  {message.content}
+                </ReactMarkdown>
+              </div>
+            ) : Array.isArray(message.content) ? (
+              <div className="space-y-6">
+                <div className="overflow-x-auto">
+                  {/* This table rendering is likely for a legacy display.
+                        The primary data view is now in DataTablePreview.
+                        However, we will update it to use the correct field names. */}
+                  <table className="w-full text-sm">
+                    <thead className="border-b">
+                      <tr className="text-left">
+                        <th className="p-2">Product</th>
+                        <th className="p-2">Description</th>
+                        <th className="p-2">Price</th>
+                        <th className="p-2">Limit</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(message.content as Product[]).map((p, i) => (
+                        <tr key={i} className="border-b">
+                          {/* Updated to use the new field names */}
+                          <td className="p-2 font-medium">{p.product_name}</td>
+                          <td className="text-muted-foreground p-2">
+                            {p.product_description}
+                          </td>
+                          <td className="p-2">{p.price}</td>
+                          <td className="p-2">{p.limit}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              ) : // 2. Fallback to check if it's a string.
-              typeof message.content === 'string' ? (
-                <p className="whitespace-pre-wrap">{message.content}</p>
-              ) : // 3. If it's not a string or a file, it must be the Product[] array.
-              // We can safely cast it here because all other possibilities are exhausted.
-              Array.isArray(message.content) ? (
-                <div className="space-y-6">
-                  {Object.entries(
-                    groupProducts(message.content as Product[]),
-                  ).map(([group, products]) => (
-                    <div key={group}>
-                      <h3 className="mb-2 font-semibold">{group}</h3>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead className="border-b">
-                            <tr className="text-left">
-                              <th className="p-2">Product</th>
-                              <th className="p-2">Description</th>
-                              <th className="p-2">Price</th>
-                              <th className="p-2">Limit</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {products.map((p, i) => (
-                              <tr key={i} className="border-b">
-                                <td className="p-2 font-medium">{p.name}</td>
-                                <td className="text-muted-foreground p-2">
-                                  {p.description}
-                                </td>
-                                <td className="p-2">{p.price}</td>
-                                <td className="p-2">{p.limit}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : null
-            }
+              </div>
+            ) : null}
 
             {message.imageUrl && (
               <img

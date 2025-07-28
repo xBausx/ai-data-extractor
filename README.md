@@ -1,43 +1,68 @@
-# "Adept" AI Data Extractor (v1.1)
+# Adept AI Extractor API
 
-Adept is a multi-tenant, AI-powered application designed to ingest user-uploaded files (images, audio, video, PDFs, Excel), use a sophisticated AI agent to extract structured data, and provide a human-in-the-loop interface for refining the results.
+[![Next.js](https://img.shields.io/badge/Next.js-15.3-black?style=for-the-badge&logo=next.js)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue?style=for-the-badge&logo=typescript)](https://www.typescriptlang.org/)
+[![Inngest](https://img.shields.io/badge/Inngest-3.x-brightgreen?style=for-the-badge)](https://www.inngest.com/)
+[![Prisma](https://img.shields.io/badge/Prisma-5.x-darkblue?style=for-the-badge&logo=prisma)](https://www.prisma.io/)
 
-This project serves as the core infrastructure for the Adept application, built on a modern, type-safe, and scalable technology stack.
+Adept is an API-first, AI-powered service for extracting structured data from images. It provides a robust, asynchronous workflow for initiating extraction jobs, refining results through conversational input, and preparing the final structured data for integration with external systems.
+
+This repository contains the full infrastructure stack required to operate the API server, job orchestrator, and AI execution environment.
 
 ---
 
-## Core Technologies & Architecture
+## Architecture Overview
 
-| Category                  | Technology                                                                    |
-| ------------------------- | ----------------------------------------------------------------------------- |
-| **Framework**             | [Next.js](https://nextjs.org/) 15.3.3 (App Router)                            |
-| **API Layer**             | [tRPC](https://trpc.io/) for end-to-end type-safe APIs                        |
-| **Database**              | [PostgreSQL](https://www.postgresql.org/)                                     |
-| **ORM**                   | [Prisma](https://www.prisma.io/) for type-safe database access and migrations |
-| **Authentication**        | [Lucia Auth](https://lucia-auth.com/) for multi-tenant user management        |
-| **Job Orchestration**     | [Inngest](https://www.inngest.com/) for reliable, long-running AI tasks       |
-| **AI Agent**              | [@inngest/agent-kit](https://www.inngest.com/docs/features/ai-agents)         |
-| **LLM**                   | [OpenAI GPT-4 Turbo](https://openai.com/)                                     |
-| **Execution Environment** | [E2B Sandbox](https://www.e2b.dev/) for isolated code execution               |
-| **Code Quality**          | ESLint, Prettier, Husky, lint-staged                                          |
-| **Deployment**            | Vercel (TBD)                                                                  |
+Adept employs a modern, asynchronous architecture to reliably process long-running AI tasks without blocking client operations.
+
+### Core Workflow
+
+1. **Job Submission**  
+   A client initiates a job via `POST /api/jobs/extract` with an image URL.
+
+2. **Immediate Response**  
+   The API stores a `pending` job in the database, triggers an asynchronous task via Inngest, and returns a `202 Accepted` response with a `jobId`.
+
+3. **Asynchronous Processing**  
+   The Inngest function invokes a secure E2B sandbox to run a Python script that performs AI-powered extraction.
+
+4. **Result Storage**  
+   On completion, the database is updated with the extracted data and a `completed` or `failed` status.
+
+5. **Client Polling**  
+   The client polls a `GET` endpoint using the `jobId` to retrieve the job status and extracted result.
+
+---
+
+## Technology Stack
+
+| Category              | Technology                                                                                             |
+| --------------------- | ------------------------------------------------------------------------------------------------------ |
+| **Framework**         | [Next.js](https://nextjs.org/) (App Router)                                                            |
+| **Public API**        | [Next.js Route Handlers](https://nextjs.org/docs/app/building-your-application/routing/route-handlers) |
+| **API Documentation** | [Swagger UI](https://swagger.io/tools/swagger-ui/), [OpenAPI](https://www.openapis.org/)               |
+| **Database**          | [PostgreSQL](https://www.postgresql.org/) (via Docker)                                                 |
+| **ORM**               | [Prisma](https://www.prisma.io/)                                                                       |
+| **Job Orchestration** | [Inngest](https://www.inngest.com/)                                                                    |
+| **AI Execution**      | [E2B Code Interpreter](https://www.e2b.dev/)                                                           |
+| **LLM Provider**      | [OpenAI GPT-4o](https://openai.com/)                                                                   |
+| **Auth (Web UI)**     | [Lucia Auth](https://lucia-auth.com/)                                                                  |
+| **Code Quality**      | ESLint, Prettier, Husky, lint-staged                                                                   |
 
 ---
 
 ## Getting Started
 
-Follow these instructions to set up and run the project locally.
-
 ### Prerequisites
 
-- Node.js (v18.18 or later)
+- Node.js v18.18 or higher
 - Docker and Docker Compose
 
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/xBausx/ai-data-extractor.git
-cd ai-data-extractor
+git clone <your-repository-url>
+cd adept-ai-api
 ```
 
 ### 2. Install Dependencies
@@ -46,54 +71,102 @@ cd ai-data-extractor
 npm install
 ```
 
-### 3. Set Up Environment Variables
+### 3. Configure Environment Variables
 
-Create a `.env` file by copying the example. This file will store your database connection string and other secrets.
+Copy the example environment files:
 
 ```bash
 cp .env.example .env
+cp .env.local.example .env.local
 ```
 
-Note: The `.env` file is included in `.gitignore` and should never be committed to the repository.
+Edit `.env.local` and provide your credentials and keys (e.g., OpenAI, E2B).
 
-### 4. Start the Database
-
-This command starts a PostgreSQL database container in the background using Docker.
+### 4. Start the PostgreSQL Database
 
 ```bash
 docker-compose up -d
 ```
 
-### 5. Run Database Migrations
-
-Prisma uses a migration history to manage your database schema. Run the following command to apply any pending migrations.
+### 5. Run Prisma Migrations
 
 ```bash
 npx prisma migrate dev
 ```
 
-### 6. Run the Development Server
+### 6. Start the Development Server
 
 ```bash
 npm run dev
 ```
 
-The application will be available at `http://localhost:3000`
+Access the API and Swagger UI at: [http://localhost:3000](http://localhost:3000)
+
+---
+
+## API Usage
+
+### Swagger UI
+
+Once the server is running, the Swagger UI will be available at the root route:
+http://localhost:3000/
+
+This provides an interactive interface to explore and test the API.
+
+---
+
+### Quick Start via `curl`
+
+#### 1. Submit an Extraction Job
+
+```bash
+curl -X POST http://localhost:3000/api/jobs/extract \
+  -H "Content-Type: application/json" \
+  -d '{
+    "imageUrl": "https://d1csarkz8obe9u.cloudfront.net/posterpreviews/supermarket-grocery-flyer-template-design-62d4bac98ec3e801492f00d5cac7df1f_screen.jpg?ts=1698450919"
+  }'
+```
+
+Example response:
+
+```json
+{
+  "jobId": "01K10AJ2H6JG8GHBRG4TN1X4KN"
+}
+```
+
+#### 2. Poll for Job Result
+
+```bash
+curl http://localhost:3000/api/jobs/01K10AJ2H6JG8GHBRG4TN1X4KN
+```
+
+If processing is complete, the API returns the final extracted data.
+
+---
 
 ## Project Structure
 
-This project follows a modular monolith architecture. The core logic is organized by feature domains within the src/modules/ directory. \* _src/app/_: Next.js App Router pages and API routes. \* _src/lib/_: Core utilities, including the Prisma client (db.ts), tRPC setup, and Zod-validated environment variables. \* _src/modules/_: Contains all business logic, separated by domain (e.g., auth/, jobs/, stores/). \* _src/services/_: Centralizes third-party SDK initializations (e.g., OpenAI, S3, E2B). \* _prisma/_: Contains your Prisma schema and migration history.
+src/
+├── app/
+│ ├── api/ # Public REST API (Next.js Route Handlers)
+│ └── chat/ # Chat interface UI
+├── components/ # Shared React components
+├── lib/ # Utilities: Prisma client, types, etc.
+├── modules/ # Core business logic (AI logic, Inngest functions)
+├── services/ # External service initializations (e.g., E2B)
+prisma/ # Prisma schema and migrations
 
-## Code Quality
+---
 
-This repository is configured with ESLint, Prettier, and Husky to enforce a consistent code style. A pre-commit hook is set up to automatically format and lint staged files before they are committed.
+## Code Quality & Standards
 
-```bash
-**Action Item:** Before proceeding, create the `.env.example` file mentioned in the README. Simply copy your `.env` file but replace your secret values with placeholders. For now, it will just contain the database URL.
-```
+- **Linting:** Enforced with ESLint.
+- **Formatting:** Handled by Prettier.
+- **Pre-commit Hooks:** Managed via Husky and lint-staged for clean code at every commit.
 
-## .env.example
+---
 
-```bash
-DATABASE_URL="postgresql://adept:adeptpassword@localhost:5432/adeptdb?schema=public"
-```
+## License
+
+This project is licensed under your organization's default license. Please refer to the `LICENSE` file if available.

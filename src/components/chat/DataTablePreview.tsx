@@ -1,7 +1,8 @@
 // src/components/chat/DataTablePreview.tsx
 'use client'
 
-import { Product } from '@/app/page'
+// Import the Product type from our new single source of truth.
+import { type Product } from '@/lib/types'
 import {
   Table,
   TableHeader,
@@ -32,9 +33,9 @@ export const DataTablePreview = ({ data }: DataTablePreviewProps) => {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[150px]">Group</TableHead>
             <TableHead>Name</TableHead>
             <TableHead>Description</TableHead>
+            <TableHead>Physical Description</TableHead>
             <TableHead className="text-right">Price</TableHead>
             <TableHead className="text-right">Limit</TableHead>
           </TableRow>
@@ -42,9 +43,9 @@ export const DataTablePreview = ({ data }: DataTablePreviewProps) => {
         <TableBody>
           {data.map((product, index) => (
             <TableRow key={index}>
-              <TableCell className="font-medium">{product.group}</TableCell>
-              <TableCell>{product.name}</TableCell>
-              <TableCell>{product.description}</TableCell>
+              <TableCell>{product.product_name}</TableCell>
+              <TableCell>{product.product_description}</TableCell>
+              <TableCell>{product.physical_product_description}</TableCell>
               <TableCell className="text-right">{product.price}</TableCell>
               <TableCell className="text-right">{product.limit}</TableCell>
             </TableRow>

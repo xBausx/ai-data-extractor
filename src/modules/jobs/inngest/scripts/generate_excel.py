@@ -19,13 +19,12 @@ try:
     ws.title = "Extracted Products"
 
     # Define and write the headers for the columns
-    headers = ["Group", "Name", "Description", "Price", "Limit"]
+    headers = ["Name", "Description", "Price", "Limit"]
     ws.append(headers)
 
     # Loop through the products and write each one as a new row
     for product in products:
         row = [
-            product.get('group', ''),
             product.get('name', ''),
             product.get('description', ''),
             product.get('price', ''),

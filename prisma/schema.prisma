@@ -32,8 +32,9 @@ model Session {
 // This model will store the results of our AI agent jobs.
 model JobResult {
   id        String   @id
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
+  // The userId and the relation to User are now optional.
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
   data      Json
   status    String   // "completed" or "failed"
   error     String?
